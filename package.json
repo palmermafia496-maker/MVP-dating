@@ -1,32 +1,12 @@
 {
-  "name": "dating-app-backend",
+  "name": "palmermafi496-maker",
   "version": "1.0.0",
-  "description": "Backend for AI-powered automated dating app",
-  "main": "index.js",
   "type": "module",
+  "main": "server.js",
   "scripts": {
-    "start": "node server .js",
-    "dev": "nodemon index.js"
+    "start": "node server.js"
   },
-  "keywords": [
-    "dating-app",
-    "supabase",
-    "stripe",
-    "nodejs",
-    "express"
-  ],
-  "author": "Your Name",
-  "license": "MIT",
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.3",
-    "bcryptjs": "^2.4.3",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "pg": "^8.11.3",
-    "stripe": "^14.21.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.2"
+    "express": "^4.19.2"
   }
 }
