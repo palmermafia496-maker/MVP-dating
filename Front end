@@ -1,0 +1,51 @@
+import React from 'react';
+import { View, Button, Linking, StyleSheet, Text } from 'react-native';
+
+export default function App() {
+  // Replace this link with your Stripe Payment Link
+  const stripeLink = "https://buy.stripe.com/your-checkout-link";
+
+  const handleUpgrade = () => {
+    Linking.openURL(stripeLink)
+      .catch(err => console.error("Failed to open Stripe link", err));
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Welcome to Your Dating App</Text>
+      <Text style={styles.subtitle}>Unlock premium features to find matches faster!</Text>
+
+      <View style={styles.buttonContainer}>
+        <Button
+          title="Upgrade to Premium"
+          color="#E91E63"
+          onPress={handleUpgrade}
+        />
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  subtitle: {
+    fontSize: 16,
+    marginBottom: 30,
+    textAlign: 'center',
+    color: '#555',
+  },
+  buttonContainer: {
+    width: '80%',
+  },
+});
