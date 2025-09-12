@@ -1,27 +1,17 @@
-import React from 'react';
-import { View, Button, Linking, StyleSheet, Text } from 'react-native';
+import React from "react";
+import { View, Text, Button, Linking, StyleSheet } from "react-native";
 
 export default function App() {
-  // Replace this link with your Stripe Payment Link
-  const stripeLink = "https://buy.stripe.com/your-checkout-link";
+  const stripeLink = "https://buy.stripe.com/test_123456"; // <-- replace with your real link
 
   const handleUpgrade = () => {
-    Linking.openURL(stripeLink)
-      .catch(err => console.error("Failed to open Stripe link", err));
+    Linking.openURL(stripeLink); // opens Stripe checkout in browser
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Welcome to Your Dating App</Text>
-      <Text style={styles.subtitle}>Unlock premium features to find matches faster!</Text>
-
-      <View style={styles.buttonContainer}>
-        <Button
-          title="Upgrade to Premium"
-          color="#E91E63"
-          onPress={handleUpgrade}
-        />
-      </View>
+      <Text style={styles.title}>Welcome to My Dating App</Text>
+      <Button title="Upgrade to Premium" onPress={handleUpgrade} />
     </View>
   );
 }
@@ -29,12 +19,15 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
   },
   title: {
+    fontSize: 22,
+    marginBottom: 20,
+  },
+});  title: {
     fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 10,
