@@ -1,19 +1,199 @@
-{
-  "name": "MVP-dating-backend",
-  "version": "1.0.0",
-  "description": "Backend for MVP Dating App",
-  "main": "index.js",
-  "type": "module",
-  "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "dotenv": "^16.3.1"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.2"
+// backend/index.js
+import express from "express";
+import Stripe from "stripe";
+import cors from "cors";
+import dotenv from "dotenv";
+import { createClient } from "@supabase/supabase-js";
+import process from "process";
+
+dotenv.config();
+
+const PORT = process.env.PORT || 3000;
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: "2022-11-15",
+});
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
+
+const app = express();
+
+// IMPORTANT: For the webhook route we need raw body, but for other routes we want JSON.
+// We'll set express.json() for general routes and use express.raw for /webhook only.
+app.use(cors());
+app.use(express.json());
+
+/**
+ * Helper: upsert user in Supabase
+ * Creates user row (email) if not exists, or updates premium flag.
+ */
+async function upsertUser(email, { premium = false } = {}) {
+  if (!email) return null;
+  const payload = { email, premium };
+
+  const { data, error } = await supabase
+    .from("users")
+    .upsert(payload, { onConflict: "email" });
+
+  if (error) {
+    console.error("Supabase upsert error:", error);
+    throw error;
   }
+  return data;
 }
+
+/**
+ * 1) Create Checkout Session
+ * Frontend calls this endpoint to create a Checkout Session for a specific user/email.
+ * Returns the session URL to redirect the user to Stripe Checkout.
+ */
+app.post("/create-checkout-session", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Missing email" });
+
+    // Optional: ensure the user row exists in Supabase (non-premium by default)
+    await upsertUser(email, { premium: false });
+
+    // Create a Stripe Checkout session using the PRICE ID you set in .env
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription", // or "payment" depending on how you created the price
+      payment_method_types: ["card"],
+      customer_email: email,
+      line_items: [
+        {
+          price: process.env.STRIPE_PRICE_ID,
+          quantity: 1,
+        },
+      ],
+      success_url: `${process.env.FRONTEND_SUCCESS_URL}?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: process.env.FRONTEND_CANCEL_URL,
+    });
+
+    res.json({ url: session.url, id: session.id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Unable to create checkout session" });
+  }
+});
+
+/**
+ * 2) Webhook: receives events from Stripe (must be a public HTTPS URL)
+ * IMPORTANT: use express.raw for the webhook route
+ */
+app.post(
+  "/webhook",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    const sig = req.headers["stripe-signature"];
+
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        process.env.STRIPE_WEBHOOK_SECRET
+      );
+    } catch (err) {
+      console.error("⚠️  Webhook signature verification failed.", err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    // Handle the event
+    switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object;
+
+        // session.customer_email should exist because we set customer_email when creating the session
+        const email = session.customer_email;
+        console.log("Payment complete for:", email);
+
+        // Mark user as premium in Supabase
+        try {
+          await upsertUser(email, { premium: true });
+          console.log(`User ${email} set to premium in Supabase`);
+        } catch (err) {
+          console.error("Failed to upsert user after webhook:", err);
+        }
+        break;
+      }
+
+      case "invoice.payment_failed": {
+        // Optional: handle failed payments (downgrade, notify, etc)
+        console.log("invoice.payment_failed event:", event.data.object);
+        break;
+      }
+
+      // Add more cases if you want to handle cancellations, subscription updates, etc.
+      default:
+        // Unexpected event type
+        console.log(`Unhandled event type ${event.type}`);
+    }
+
+    // Return a 200 response to acknowledge receipt of the event
+    res.json({ received: true });
+  }
+);
+
+/**
+ * 3) Endpoint for frontend to check user premium status
+ * Example: GET /user-status?email=user@example.com
+ */
+app.get("/user-status", async (req, res) => {
+  try {
+    const email = req.query.email;
+    if (!email) return res.status(400).json({ error: "Missing email query" });
+
+    const { data, error } = await supabase
+      .from("users")
+      .select("premium")
+      .eq("email", email)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      // PGRST116 occurs when no rows; we'll treat missing row as not premium
+      console.error("Supabase select error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    const premium = data?.premium || false;
+    res.json({ premium });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/**
+ * 4) Optional: signup endpoint to create a user record (useful when users register)
+ * POST /signup  { "email": "user@example.com" }
+ */
+app.post("/signup", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Missing email" });
+
+    const { data, error } = await supabase
+      .from("users")
+      .upsert({ email, premium: false }, { onConflict: "email" });
+
+    if (error) {
+      console.error("Supabase signup error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/**
+ * Health check
+ */
+app.get("/", (req, res) => res.send("Dating app backend is running"));
+
+app.listen(PORT, () =>
+  console.log(`🚀 Backend listening on port ${PORT} (http://localhost:${PORT})`)
+);
